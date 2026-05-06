@@ -9,11 +9,24 @@ from datetime import datetime
 import json
 import io
 import time
+import streamlit.components.v1 as components
 
 # Import new features
 import cv2
 from face_detection import FaceDetector
 from sentiment_analysis import SentimentAnalyzer
+from lstm_model import LSTMPredictor, COMMON_PHRASES, COMMON_SEQUENCES
+from hopfield_network import get_trained_network
+import matplotlib.pyplot as plt
+
+# # from hopfield_network import HopfieldNetwork, AlphabetPatterns
+# from hopfield_network import get_trained_hopfield_network
+
+# # Use the trained network for recognition
+# hopfield = get_trained_hopfield_network()
+# result = hopfield.recall(your_drawing_pattern)
+
+# from hopfield_network import *
 
 try:
     import plotly.graph_objects as go
@@ -24,7 +37,7 @@ except ImportError:
     st.warning("⚠️ Plotly not installed. Using basic visualizations. Install with: `pip install plotly`")
 
 st.set_page_config(
-    page_title="Neural Network Predictor",
+    page_title="Neuraflow",
     page_icon="🧠",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -375,6 +388,27 @@ st.markdown("""
         max-width: 480px;
         margin: 0 auto;
     }
+    
+    /* Hopfield canvas styling */
+    .hopfield-grid {
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 2px;
+        background: #f0f0f0;
+        padding: 10px;
+        border-radius: 10px;
+    }
+    .hopfield-cell {
+        aspect-ratio: 1;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .hopfield-cell:hover {
+        transform: scale(1.05);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -428,11 +462,35 @@ if 'face_detection_result' not in st.session_state:
 if 'sentiment_result' not in st.session_state:
     st.session_state.sentiment_result = None
 
+# LSTM session states
+if 'lstm_predictor' not in st.session_state:
+    st.session_state.lstm_predictor = LSTMPredictor()
+if 'text_model_trained' not in st.session_state:
+    st.session_state.text_model_trained = False
+if 'sequence_model_trained' not in st.session_state:
+    st.session_state.sequence_model_trained = False
+if 'prediction_result' not in st.session_state:
+    st.session_state.prediction_result = None
+if 'sequence_result' not in st.session_state:
+    st.session_state.sequence_result = None
+if 'current_text' not in st.session_state:
+    st.session_state.current_text = ""
+
+# Hopfield Network session states
+if 'hopfield_canvas' not in st.session_state:
+    st.session_state.hopfield_canvas = np.ones((10, 10)) * -1
+if 'hopfield_trained' not in st.session_state:
+    st.session_state.hopfield_trained = False
+if 'hopfield_network' not in st.session_state:
+    st.session_state.hopfield_network = None
+if 'recognition_result' not in st.session_state:
+    st.session_state.recognition_result = None
+
 # ========== HEADER ==========
 st.markdown("""
 <div class="main-header">
-    <div class="main-title">🧠 Neural Network Predictor</div>
-    <div class="main-subtitle">Interactive Machine Learning Platform</div>
+    <div class="main-title">🧠 Neuraflow</div>
+    <div class="main-subtitle">Interactive Neural Network Learning Platform</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -457,8 +515,7 @@ if st.session_state.current_page == 'home':
             <div class='option-icon'>⚡</div>
             <div class='option-title'>Perceptron Logic Gates</div>
             <div class='option-description'>
-                Master neural network fundamentals with our interactive logic gate simulator. 
-                Train perceptrons for AND, OR, NAND, NOR gates in real-time.
+                Learn neural networks with interactive logic gates. Train perceptrons for AND, OR, NAND, NOR in real-time.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -533,6 +590,47 @@ if st.session_state.current_page == 'home':
             st.session_state.current_page = 'sentiment_analysis'
             st.rerun()
     
+    with col6:
+        st.markdown("""
+        <div class='option-card' id='hopfield-card'>
+            <div class='option-icon'>🧠</div>
+            <div class='option-title'>Hopfield Pattern Recognition</div>
+            <div class='option-description'>
+                Draw letters on a canvas and let the Hopfield Network recognize them!
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("Select Hopfield Network", key="hopfield_home", use_container_width=True):
+            st.session_state.current_page = 'hopfield'
+            st.rerun()
+    
+    with col7:
+        st.markdown("""
+        <div class='option-card' id='lstm-card'>
+            <div class='option-icon'>📝</div>
+            <div class='option-title'>LSTM Predictor</div>
+            <div class='option-description'>
+                Predict next words in a sentence or next numbers in a sequence using LSTM neural networks.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("Select LSTM Predictor", key="lstm_home", use_container_width=True):
+            st.session_state.current_page = 'lstm'
+            st.rerun()
+    
+    with col8:
+        st.markdown("""
+        <div class='option-card' id='coming-soon-card'>
+            <div class='option-icon'>🚀</div>
+            <div class='option-title'>More Features</div>
+            <div class='option-description'>
+                More exciting features coming soon!
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
     st.markdown("""
     <div style='margin-top: 2rem; padding: 1.5rem; background: rgba(102, 126, 234, 0.05); border-radius: 20px;'>
         <h3 style='color: #2d3748; margin-bottom: 1rem;'>✨ Key Features</h3>
@@ -564,16 +662,23 @@ if st.session_state.current_page == 'home':
                 <div style='color: #718096;'>Text sentiment analysis with smart suggestions</div>
             </div>
         </div>
+        <div class='feature-highlight'>
+            <span style='font-size: 1.5rem; margin-right: 1rem;'>🧠</span>
+            <div>
+                <strong>Hopfield Network</strong>
+                <div style='color: #718096;'>Pattern recognition with associative memory</div>
+            </div>
+        </div>
+        <div class='feature-highlight'>
+            <span style='font-size: 1.5rem; margin-right: 1rem;'>📝</span>
+            <div>
+                <strong>LSTM Predictor</strong>
+                <div style='color: #718096;'>Next word and sequence prediction</div>
+            </div>
+        </div>
     </div>
     
-    <div style='margin-top: 2rem;'>
-        <h3 style='color: #2d3748; margin-bottom: 1rem;'>📁 Sample Data Format (for Sales Predictor)</h3>
-        <div style='background: rgba(45, 55, 72, 0.05); padding: 1rem; border-radius: 15px; font-family: monospace; font-size: 0.85rem; color: #4a5568;'>
-        brand,category,gender,base_price,discount_percent,customer_rating,size,units_sold<br>
-        Nike,Running,Male,129.99,15,4.5,9.0,250<br>
-        Adidas,Casual,Female,89.99,20,4.2,7.5,180<br>
-        Puma,Sports,Male,79.99,10,4.7,10.0,320
-        </div>
+    
     </div>
     """, unsafe_allow_html=True)
     
@@ -1341,8 +1446,600 @@ elif st.session_state.current_page == 'sentiment_analysis':
     
     st.markdown('</div>', unsafe_allow_html=True)
 
+# ========== LSTM PREDICTOR PAGE ==========
+
+
+# ========== LSTM PREDICTOR PAGE ==========
+elif st.session_state.current_page == 'lstm':
+    st.markdown('<div class="lstm-page">', unsafe_allow_html=True)
+    
+    if st.button("← Back to Home", key="back_lstm"):
+        st.session_state.current_page = 'home'
+        st.rerun()
+    
+    st.markdown("<div class='panel-title'>📝 LSTM Predictor</div>", unsafe_allow_html=True)
+    
+    # Initialize session states
+    if 'lstm_predictor' not in st.session_state:
+        from lstm_model import LSTMPredictor
+        st.session_state.lstm_predictor = LSTMPredictor()
+    if 'text_model_trained' not in st.session_state:
+        st.session_state.text_model_trained = False
+    if 'sequence_model_trained' not in st.session_state:
+        st.session_state.sequence_model_trained = False
+    if 'prediction_result' not in st.session_state:
+        st.session_state.prediction_result = None
+    if 'sequence_result' not in st.session_state:
+        st.session_state.sequence_result = None
+    if 'current_text' not in st.session_state:
+        st.session_state.current_text = ""
+    if 'text_input_value' not in st.session_state:
+        st.session_state.text_input_value = ""
+    
+    # Create tabs for different modes
+    tab1, tab2 = st.tabs(["📖 Next Word Prediction", "🔢 Number Sequence Prediction"])
+    
+    with tab1:
+        st.markdown("### 📖 Next Word Prediction")
+        st.markdown("Write a sentence and get suggestions for the next word")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Train button
+            if not st.session_state.text_model_trained:
+                if st.button("🎓 Train Text Model", type="primary", use_container_width=True):
+                    with st.spinner("Training text prediction model..."):
+                        st.session_state.lstm_predictor.train_text_model()
+                        st.session_state.text_model_trained = True
+                        st.success("✅ Text model trained successfully on 100+ common phrases!")
+                        st.rerun()
+            else:
+                st.success("✅ Text model is ready!")
+            
+            st.markdown("---")
+            
+            # Callback for text change
+            def on_text_change():
+                st.session_state.current_text = st.session_state.text_input_widget
+                st.session_state.prediction_result = None
+            
+            # Input text - using session state value properly
+            user_text = st.text_area(
+                "Enter your sentence:",
+                height=100,
+                placeholder="Example: the cat sat on the",
+                key="text_input_widget",
+                value=st.session_state.text_input_value,
+                on_change=on_text_change
+            )
+            
+            # Number of predictions
+            num_predictions = st.slider(
+                "Number of suggestions:",
+                min_value=1,
+                max_value=5,
+                value=3,
+                key="num_predictions"
+            )
+            
+            # Predict button
+            col_predict, col_clear = st.columns(2)
+            with col_predict:
+                if st.button("🔮 Predict Next Word", type="primary", use_container_width=True):
+                    if not st.session_state.text_model_trained:
+                        st.warning("⚠️ Please train the text model first!")
+                    elif not user_text.strip():
+                        st.warning("⚠️ Please enter some text!")
+                    else:
+                        predictions = st.session_state.lstm_predictor.predict_next_word(
+                            user_text, num_predictions
+                        )
+                        st.session_state.prediction_result = predictions
+                        st.session_state.current_text = user_text
+            
+            with col_clear:
+                if st.button("🗑️ Clear", use_container_width=True):
+                    st.session_state.prediction_result = None
+                    st.session_state.current_text = ""
+                    st.session_state.text_input_value = ""
+                    st.rerun()
+            
+            # Show predictions
+            if st.session_state.get('prediction_result'):
+                st.markdown("### 💡 Suggestions:")
+                
+                st.markdown(f"**Your input:** _{st.session_state.current_text}_")
+                st.markdown("**Click a word to add it to your sentence:**")
+                
+                # Display predictions as buttons
+                pred_cols = st.columns(len(st.session_state.prediction_result))
+                for idx, word in enumerate(st.session_state.prediction_result):
+                    with pred_cols[idx]:
+                        if st.button(f"📝 {word}", key=f"suggest_word_{idx}", use_container_width=True):
+                            # Add the word to the text
+                            new_text = st.session_state.current_text + " " + word
+                            st.session_state.text_input_value = new_text
+                            st.session_state.current_text = new_text
+                            st.session_state.prediction_result = None
+                            st.rerun()
+                
+                # Show complete sentence examples
+                st.markdown("---")
+                st.markdown("**Complete sentence examples:**")
+                for word in st.session_state.prediction_result[:3]:
+                    st.info(f"💬 {st.session_state.current_text} **{word}**")
+        
+        with col2:
+            st.markdown("### ℹ️ How it works")
+            st.markdown("""
+            **Context-Aware Text Prediction**
+            
+            The model learns patterns from 100+ common English phrases:
+            
+            **Examples that work well:**
+            - "the cat sat on" → **the**, **a**, **his**
+            - "I am at" → **home**, **work**, **school**, **the office**
+            - "the weather is" → **nice**, **good**, **bad**, **cold**
+            - "thank you for" → **your**, **the**, **helping**
+            
+            **What the model learned:**
+            - "the cat sat on the" → **mat**, **chair**, **floor**, **couch**
+            - "the dog ran" → **away**, **fast**, **quickly**
+            - "I am going" → **to**, **home**, **there**
+            - "she is very" → **happy**, **kind**, **smart**, **beautiful**
+            
+            **Tips for best results:**
+            - Start with common phrases
+            - Use 3-4 words for better context
+            - Click on suggested words to build sentences
+            """)
+            
+            if st.session_state.text_model_trained:
+                with st.expander("📚 Sample training data"):
+                    st.markdown("""
+                    **The model was trained on phrases like:**
+                    - the cat sat on the mat
+                    - the dog ran in the park
+                    - I am at home right now
+                    - I am at work all day
+                    - what is your name
+                    - how are you today
+                    - thank you for your help
+                    - the weather is nice today
+                    - she is very happy
+                    - he is very smart
+                    - i am going to the store
+                    - i am going to school
+                    """)
+    
+    with tab2:
+        st.markdown("### 🔢 Number Sequence Prediction")
+        st.markdown("Enter a sequence of numbers and predict the next one")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.info("✅ Sequence model is always ready! No training needed.")
+            
+            st.markdown("---")
+            
+            # Input sequence
+            st.markdown("#### Enter your sequence:")
+            
+            col_seq1, col_seq2 = st.columns(2)
+            with col_seq1:
+                sequence_input = st.text_input(
+                    "Numbers (comma-separated):",
+                    placeholder="1, 2, 3, 4, 5",
+                    key="sequence_input"
+                )
+            
+            with col_seq2:
+                st.markdown("#### Quick examples:")
+                example_sequences = {
+                    "Arithmetic": "1, 2, 3, 4, 5",
+                    "Even numbers": "2, 4, 6, 8, 10",
+                    "Odd numbers": "1, 3, 5, 7, 9",
+                    "Fibonacci": "1, 1, 2, 3, 5",
+                    "Squares": "1, 4, 9, 16, 25",
+                    "Cubes": "1, 8, 27, 64, 125",
+                    "Powers of 2": "2, 4, 8, 16, 32",
+                    "Decreasing": "100, 90, 80, 70, 60"
+                }
+                selected_example = st.selectbox("Select example:", ["Custom"] + list(example_sequences.keys()), key="example_selector")
+                
+                if selected_example != "Custom" and selected_example:
+                    sequence_input = example_sequences[selected_example]
+            
+            # Process sequence
+            numbers = []
+            if sequence_input:
+                try:
+                    numbers = [int(x.strip()) for x in sequence_input.split(',')]
+                    st.markdown(f"**Your sequence:** {numbers}")
+                    
+                    # Show detected pattern
+                    if len(numbers) >= 2:
+                        diff = numbers[1] - numbers[0]
+                        if diff > 0:
+                            st.markdown(f"📈 **Detected pattern:** Increasing by {diff}")
+                        elif diff < 0:
+                            st.markdown(f"📉 **Detected pattern:** Decreasing by {abs(diff)}")
+                        else:
+                            st.markdown(f"➡️ **Detected pattern:** Constant value")
+                except:
+                    st.error("Please enter valid numbers separated by commas")
+                    numbers = []
+            
+            # Predict button
+            if st.button("🔮 Predict Next Number", type="primary", use_container_width=True):
+                if len(numbers) < 2:
+                    st.warning("⚠️ Please enter at least 2 numbers!")
+                else:
+                    prediction = st.session_state.lstm_predictor.predict_next_number(numbers)
+                    if prediction is not None:
+                        st.session_state.sequence_result = prediction
+                        st.success(f"✅ Predicted next number: **{prediction}**")
+                    else:
+                        st.warning("Could not predict the next number. Try a different sequence pattern!")
+            
+            # Show result with visualization
+            if st.session_state.get('sequence_result'):
+                st.markdown("---")
+                st.markdown("### 📊 Sequence Visualization")
+                
+                # Show the sequence with prediction
+                extended_sequence = numbers + [st.session_state.sequence_result]
+                
+                # Create visualization
+                import plotly.graph_objects as go
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=list(range(len(numbers))),
+                    y=numbers,
+                    mode='lines+markers',
+                    name='Original Sequence',
+                    line=dict(color='#667eea', width=3),
+                    marker=dict(size=10, color='#667eea')
+                ))
+                fig.add_trace(go.Scatter(
+                    x=[len(numbers)],
+                    y=[st.session_state.sequence_result],
+                    mode='markers',
+                    name='Predicted',
+                    marker=dict(color='#10b981', size=20, symbol='star', line=dict(color='white', width=2))
+                ))
+                
+                fig.update_layout(
+                    title='Number Sequence with Prediction',
+                    xaxis_title='Position in Sequence',
+                    yaxis_title='Value',
+                    height=350,
+                    showlegend=True,
+                    hovermode='x unified'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.info(f"🔮 **Complete sequence:** {', '.join(map(str, extended_sequence))}")
+                
+                # Button to clear result
+                if st.button("🗑️ Clear Result", use_container_width=True):
+                    st.session_state.sequence_result = None
+                    st.rerun()
+        
+        with col2:
+            st.markdown("### ℹ️ How it works")
+            st.markdown("""
+            **Pattern Recognition for Sequences**
+            
+            The model automatically detects multiple pattern types:
+            
+            **1. Arithmetic Sequences:**
+            - 1, 2, 3, 4, 5 → **6**
+            - 10, 20, 30, 40 → **50**
+            
+            **2. Geometric Sequences:**
+            - 2, 4, 8, 16 → **32**
+            - 3, 9, 27, 81 → **243**
+            
+            **3. Special Sequences:**
+            - Fibonacci: 1, 1, 2, 3, 5 → **8**
+            - Squares: 1, 4, 9, 16 → **25**
+            - Cubes: 1, 8, 27, 64 → **125**
+            - Powers of 2: 2, 4, 8, 16 → **32**
+            
+            **4. Alternating Patterns:**
+            - 1, 2, 1, 2, 1 → **2**
+            
+            **Tips for best results:**
+            - Enter at least 3-4 numbers
+            - Try different pattern types
+            - Use the example dropdown for testing
+            """)
+            
+            with st.expander("📊 Pattern examples to try:"):
+                st.markdown("""
+                | Pattern Type | Sequence | Next Number |
+                |-------------|----------|-------------|
+                | Counting | 1, 2, 3, 4, 5 | 6 |
+                | Even numbers | 2, 4, 6, 8, 10 | 12 |
+                | Odd numbers | 1, 3, 5, 7, 9 | 11 |
+                | Multiples of 5 | 5, 10, 15, 20 | 25 |
+                | Fibonacci | 1, 1, 2, 3, 5 | 8 |
+                | Squares | 1, 4, 9, 16 | 25 |
+                | Cubes | 1, 8, 27, 64 | 125 |
+                | Powers of 2 | 2, 4, 8, 16 | 32 |
+                | Decreasing | 100, 90, 80, 70 | 60 |
+                | Alternating | 1, 2, 1, 2, 1 | 2 |
+                """)
+    
+    st.markdown("---")
+    
+    # Educational content
+    with st.expander("📚 Learn About LSTM & Markov Chains", expanded=False):
+        col_info1, col_info2 = st.columns(2)
+        
+        with col_info1:
+            st.markdown("""
+            ### 🧠 How Text Prediction Works
+            
+            **Markov Chains** are used for text prediction:
+            
+            1. **Training**: The model analyzes hundreds of sentences
+            2. **Pattern Learning**: It learns which words commonly follow which sequences
+            3. **Context Window**: Looks at 1-3 previous words for better accuracy
+            4. **Prediction**: Suggests the most likely next words
+            
+            ### 🔢 How Number Prediction Works
+            
+            **Multiple Pattern Detectors:**
+            
+            1. **Arithmetic Progression**: Constant difference
+            2. **Geometric Progression**: Constant ratio
+            3. **Fibonacci Sequence**: Sum of previous two
+            4. **Power Sequences**: Squares, cubes, powers of 2
+            5. **Alternating Patterns**: Oscillating values
+            """)
+        
+        with col_info2:
+            st.markdown("""
+            ### 📈 Real-World Applications
+            
+            **Text Prediction:**
+            - Email auto-completion
+            - Search engine suggestions
+            - Chatbot responses
+            - Code completion
+            
+            **Sequence Prediction:**
+            - Stock market forecasting
+            - Weather prediction
+            - Sales forecasting
+            - Time series analysis
+            
+            ### 💡 Pro Tips
+            
+            - Use clear, common phrases for text prediction
+            - Enter 3-4 numbers for accurate sequence prediction
+            - The more context, the better the prediction
+            - Click on suggested words to build sentences
+            """)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ========== HOPFIELD NETWORK PATTERN RECOGNITION PAGE ==========
+
+# ========== HOPFIELD NETWORK DIGIT RECOGNITION PAGE ==========
+# ========== HOPFIELD NETWORK DIGIT RECOGNITION PAGE ==========
+elif st.session_state.current_page == 'hopfield':
+    st.markdown('<div class="hopfield-page">', unsafe_allow_html=True)
+    
+    if st.button("← Back to Home", key="back_hopfield"):
+        st.session_state.current_page = 'home'
+        st.rerun()
+    
+    st.markdown("<div class='panel-title'>🔢 Hopfield Network - Digit Recognition (0-9)</div>", unsafe_allow_html=True)
+    
+    from hopfield_network import get_trained_network
+    import numpy as np
+    from PIL import Image
+    import matplotlib.pyplot as plt
+    
+    # Initialize session state
+    if 'hopfield_prediction' not in st.session_state:
+        st.session_state.hopfield_prediction = None
+    if 'hopfield_confidence' not in st.session_state:
+        st.session_state.hopfield_confidence = 0
+    
+    col1, col2 = st.columns([1.2, 0.8])
+    
+    with col1:
+        st.markdown("### ✏️ Draw or Upload a Digit")
+        st.markdown("Draw a digit from **0 to 9** on paper or in any image editor")
+        
+        st.info("💡 **Tip:** Draw a clear digit on white paper with black ink, take a photo, then upload here.")
+        
+        uploaded_file = st.file_uploader("Upload a digit image (JPG/PNG)", type=["jpg", "jpeg", "png"], key="digit_uploader")
+        
+        if uploaded_file is not None:
+            # Load and process image
+            img = Image.open(uploaded_file)
+            
+            # Convert to grayscale and resize
+            img_gray = img.convert('L')
+            img_resized = img_gray.resize((10, 10), Image.Resampling.LANCZOS)
+            img_array = np.array(img_resized)
+            
+            # Display the processed image
+            col_display1, col_display2, col_display3 = st.columns([1, 2, 1])
+            with col_display2:
+                st.image(img_resized.resize((200, 200)), caption="Processed Image (10x10 pixels)", use_container_width=True)
+            
+            if st.button("🔍 Recognize Digit", type="primary", use_container_width=True):
+                # Convert to bipolar pattern (-1 for white, 1 for black)
+                pattern = np.where(img_array < 128, 1, -1)
+                
+                # Get prediction
+                network = get_trained_network()
+                result = network.recall(pattern)
+                
+                if result:
+                    st.session_state.hopfield_prediction = result['match_name']
+                    st.session_state.hopfield_confidence = result['confidence']
+                    st.rerun()
+                else:
+                    st.error("Recognition failed!")
+        
+        st.markdown("<p style='text-align: center; color: #666; font-size: 12px; margin-top: 10px;'>📤 Upload a clear image of a digit (0-9) for recognition</p>", unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("### 🎯 Recognition Result")
+        
+        # Network status
+        network = get_trained_network()
+        st.success(f"✅ Hopfield Network ready with {len(network.patterns)} patterns (digits 0-9)")
+        
+        st.markdown("---")
+        
+        # Display prediction
+        if st.session_state.get('hopfield_prediction'):
+            predicted = st.session_state.hopfield_prediction
+            confidence = st.session_state.hopfield_confidence
+            
+            # Color coding
+            if confidence > 0.7:
+                bg_color = "#10B981"
+                emoji = "🎉"
+            elif confidence > 0.5:
+                bg_color = "#F59E0B"
+                emoji = "👍"
+            else:
+                bg_color = "#EF4444"
+                emoji = "🤔"
+            
+            st.markdown(f"""
+            <div style='background: linear-gradient(135deg, {bg_color}15 0%, {bg_color}05 100%); 
+                        padding: 2rem; border-radius: 20px; text-align: center; margin: 1rem 0;
+                        border: 2px solid {bg_color}40;'>
+                <div style='font-size: 1rem; color: #4a5568;'>{emoji} Hopfield Network Recognized</div>
+                <div style='font-size: 5rem; font-weight: 800; color: {bg_color}; margin: 0.5rem 0;'>
+                    {predicted}
+                </div>
+                <div style='font-size: 1rem; color: #718096;'>
+                    Confidence: {confidence:.1%}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Confidence bar
+            st.markdown(f"""
+            <div style='margin-top: 1rem;'>
+                <div style='font-size: 0.9rem; color: #4a5568; margin-bottom: 0.5rem;'>
+                    Recognition Confidence
+                </div>
+                <div style='height: 12px; background: #e2e8f0; border-radius: 6px; overflow: hidden;'>
+                    <div style='height: 100%; width: {confidence*100}%; background: linear-gradient(90deg, {bg_color}, {bg_color}80); border-radius: 6px;'></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Feedback
+            if confidence > 0.7:
+                st.success("✅ High confidence! The network is very sure about this digit.")
+            elif confidence > 0.5:
+                st.info("📝 Moderate confidence. Try a clearer image for better results.")
+            else:
+                st.warning("⚠️ Low confidence. The network is unsure. Try a different image.")
+            
+            # Clear button
+            if st.button("Clear Result", use_container_width=True):
+                st.session_state.hopfield_prediction = None
+                st.session_state.hopfield_confidence = 0
+                st.rerun()
+        else:
+            st.info("👈 Upload a digit image and click 'Recognize Digit'!")
+            
+            st.markdown("""
+            <div style='background: #f0fdf4; padding: 1rem; border-radius: 12px; margin-top: 1rem;'>
+                <strong>💡 Instructions:</strong><br>
+                1. Draw a digit (0-9) on white paper with dark ink<br>
+                2. Take a clear photo or scan<br>
+                3. Upload using the file uploader<br>
+                4. Click "Recognize Digit"<br><br>
+                <strong>Tips for best results:</strong><br>
+                • Use black on white background<br>
+                • Center the digit in the image<br>
+                • Make the digit large and clear<br>
+                • Avoid shadows, glare, and background clutter<br>
+                • Use high contrast images
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Show stored patterns
+    with st.expander("🔍 View Stored Digit Patterns", expanded=False):
+        st.markdown("These are the patterns the Hopfield network learned for digits 0-9:")
+        
+        from hopfield_network import get_digit_patterns
+        patterns, names = get_digit_patterns()
+        
+        # Display patterns in 2 rows
+        for row in range(2):
+            cols = st.columns(5)
+            for col_idx in range(5):
+                idx = row * 5 + col_idx
+                if idx < len(patterns):
+                    with cols[col_idx]:
+                        pattern = patterns[idx]
+                        name = names[idx]
+                        
+                        # Create visual representation
+                        fig, ax = plt.subplots(figsize=(2, 2))
+                        ax.imshow(pattern, cmap='coolwarm', vmin=-1, vmax=1, interpolation='nearest')
+                        ax.set_title(f"Digit {name}", fontsize=10, fontweight='bold')
+                        ax.axis('off')
+                        st.pyplot(fig)
+                        plt.close(fig)
+    
+    # Educational content
+    st.markdown("---")
+    st.markdown("### 🧠 How the Hopfield Network Recognizes Digits")
+    
+    col_info1, col_info2, col_info3 = st.columns(3)
+    
+    with col_info1:
+        st.markdown("""
+        <div style='text-align: center; padding: 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 12px;'>
+            <div style='font-size: 2rem;'>📚</div>
+            <strong>Training Phase</strong><br>
+            <span style='font-size: 0.85rem; color: #666;'>Network learns patterns for digits 0-9 using Hebbian learning</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_info2:
+        st.markdown("""
+        <div style='text-align: center; padding: 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 12px;'>
+            <div style='font-size: 2rem;'>⚡</div>
+            <strong>Recognition Phase</strong><br>
+            <span style='font-size: 0.85rem; color: #666;'>Your digit image is converted to a pattern and compared to stored patterns</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_info3:
+        st.markdown("""
+        <div style='text-align: center; padding: 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 12px;'>
+            <div style='font-size: 2rem;'>🎯</div>
+            <strong>Energy Minimization</strong><br>
+            <span style='font-size: 0.85rem; color: #666;'>Network finds the closest matching digit by minimizing energy</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # ========== NEURAL NETWORK SALES PREDICTOR PAGE ==========
 elif st.session_state.current_page == 'neural_network':
+    # [Keep your existing neural_network code here unchanged]
     st.markdown('<div class="neural-network-page">', unsafe_allow_html=True)
     
     with st.sidebar:
@@ -2044,6 +2741,6 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #718096; padding: 2rem 0;'>
     <div>🧠 <strong>Neural Network Predictor</strong> | Academic Edition</div>
-    <div style='font-size: 0.8rem; margin-top: 0.5rem;'>Face Detection | Sentiment Analysis | Neural Networks | Gradient Descent</div>
+    <div style='font-size: 0.8rem; margin-top: 0.5rem;'>Face Detection | Sentiment Analysis | Hopfield Network | LSTM Predictor | Neural Networks | Gradient Descent</div>
 </div>
 """, unsafe_allow_html=True)

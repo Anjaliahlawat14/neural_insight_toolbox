@@ -2,6 +2,9 @@
 import re
 import numpy as np
 from textblob import TextBlob
+import speech_recognition as sr
+import tempfile
+import os
 
 # Try to use a lighter transformer model if available
 try:
@@ -12,6 +15,7 @@ except ImportError:
 
 class SentimentAnalyzer:
     def __init__(self):
+        self.recognizer = sr.Recognizer()
         self.classifier = None
         
         # Try to load a lightweight transformer model
@@ -28,6 +32,9 @@ class SentimentAnalyzer:
         # Fallback to enhanced keyword matching with negation handling
         if self.classifier is None:
             self.model_used = "Enhanced Keyword + TextBlob"
+            self.init_keyword_analyzer()
+        else:
+            # Still initialize keyword analyzer for fallback
             self.init_keyword_analyzer()
     
     def init_keyword_analyzer(self):
@@ -313,6 +320,85 @@ class SentimentAnalyzer:
                 unique_suggestions.append(suggestion)
         
         return unique_suggestions[:6]
+    
+    def analyze_audio(self, audio_file):
+        """Analyze sentiment from audio input"""
+        try:
+            # Save uploaded audio temporarily
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+                tmp_file.write(audio_file.read())
+                audio_path = tmp_file.name
+            
+            # Recognize speech
+            with sr.AudioFile(audio_path) as source:
+                audio = self.recognizer.record(source)
+                
+            try:
+                text = self.recognizer.recognize_google(audio)
+                sentiment_result = self.analyze_text(text)
+                sentiment_result['recognized_text'] = text
+                return sentiment_result
+                
+            except sr.UnknownValueError:
+                return {
+                    'error': 'Could not understand audio',
+                    'sentiment': 'Neutral',
+                    'confidence': 0,
+                    'suggestions': ['Please speak clearly and try again.', 'Make sure you\'re in a quiet environment.']
+                }
+            except sr.RequestError as e:
+                return {
+                    'error': f'Speech recognition service error: {e}',
+                    'sentiment': 'Neutral',
+                    'confidence': 0,
+                    'suggestions': ['Please check your internet connection and try again.']
+                }
+            finally:
+                os.unlink(audio_path)
+                
+        except Exception as e:
+            return {
+                'error': f'Error processing audio: {str(e)}',
+                'sentiment': 'Neutral',
+                'confidence': 0,
+                'suggestions': ['Please try uploading a different audio file.']
+            }
+    
+    def live_microphone_analysis(self, duration=5):
+        """Real-time sentiment analysis from microphone"""
+        try:
+            with sr.Microphone() as source:
+                print("Adjusting for ambient noise...")
+                self.recognizer.adjust_for_ambient_noise(source, duration=1)
+                print(f"Listening for {duration} seconds...")
+                
+                audio = self.recognizer.listen(source, timeout=duration, phrase_time_limit=duration)
+                text = self.recognizer.recognize_google(audio)
+                sentiment_result = self.analyze_text(text)
+                sentiment_result['recognized_text'] = text
+                return sentiment_result
+                
+        except sr.WaitTimeoutError:
+            return {
+                'error': 'No speech detected',
+                'sentiment': 'Neutral',
+                'confidence': 0,
+                'suggestions': ['Please speak into the microphone and try again.']
+            }
+        except sr.UnknownValueError:
+            return {
+                'error': 'Could not understand speech',
+                'sentiment': 'Neutral',
+                'confidence': 0,
+                'suggestions': ['Please speak clearly and try again.']
+            }
+        except Exception as e:
+            return {
+                'error': f'Microphone error: {str(e)}',
+                'sentiment': 'Neutral',
+                'confidence': 0,
+                'suggestions': ['Please check your microphone permissions and try again.']
+            }
 
 
 if __name__ == "__main__":
