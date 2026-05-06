@@ -1,41 +1,88 @@
-#  NEURAL INSIGHT TOOLBOX
+# 🧠 NeuraFlow
+   NEURAL NETWORK TOOLBOX
 
-A multi-functional AI-powered analytics toolkit that integrates machine learning models, neural networks, and sentiment analysis to provide intelligent insights and predictions.
+A multi-functional AI-powered analytics toolkit that integrates machine learning models, neural networks, computer vision, and sentiment analysis to provide intelligent insights and predictions.
+
+---
+
+## 🌐 LIVE DEMO
+
+**Access the deployed application here:**  
+🔗 [**https://neuralflow-p1f3.onrender.com/**](https://neuralflow-p1f3.onrender.com/)
+
+> *Note: It may take 15-20 seconds to wake up after inactivity. Please refresh the page if needed.*
 
 ---
 
 ## 🚀 FEATURES
 
-  **Sales Prediction**
-  - Predicts units sold using regression models
-  - Supports real-world dataset (sports footwear)
+### 1. 🧠 Perceptron Logic Gates
+- Learn neural network fundamentals with interactive logic gates
+- Train perceptrons for AND, OR, NAND, NOR gates in real-time
+- Choose from Step, Sigmoid, or ReLU activation functions
 
-  **Neural Networks (From Scratch)**
-  - Custom implementation of MLP (Multi-Layer Perceptron)
-  - Forward & backward propagation
-
-  **Gradient Descent Visualizer**
-  - Batch Gradient Descent
+### 2. 📉 Gradient Descent Visualizer
+- Compare three optimization algorithms:
+  - Batch Gradient Descent (BGD)
   - Stochastic Gradient Descent (SGD)
-  - Mini-Batch Gradient Descent
+  - Mini-Batch Gradient Descent (MBGD)
+- Visualize loss convergence and regression fitting
 
-  **Sentiment Analysis**
-  - Text-based sentiment detection (Positive / Neutral / Negative)
-  - Voice input support (Speech Recognition)
-  - Suggestions based on sentiment
+### 3. 📊 Neural Network Sales Predictor
+- Custom implementation of MLP (Multi-Layer Perceptron) from scratch
+- Predicts units sold using regression models
+- Supports real-world dataset (sports footwear)
+- Features: Hidden layer configuration, early stopping, validation split
 
-  **Interactive UI**
-  - Built with Streamlit
-  - Real-time predictions and visualizations
+### 4. 👤 Face Detection System
+- Real-time face detection using Haar Cascades
+- Live webcam capture with face counting
+- Eye and smile detection
+- Face count statistics and visualization
+
+### 5. 🎙️ Sentiment Analysis
+- Text-based sentiment detection (Positive / Neutral / Negative)
+- Voice input support with Speech Recognition
+- Smart handling of negations (e.g., "not good" → Negative)
+- Personalized suggestions based on detected sentiment
+
+### 6. 🧠 Hopfield Network - Digit Recognition
+- Associative memory model for pattern recognition
+- Recognizes handwritten digits (0-9)
+- 10×10 bipolar pattern conversion
+- Confidence scoring for predictions
+- Perfect for understanding content-addressable memory
+
+### 7. 📝 LSTM Predictor
+- **Next Word Prediction:** Predicts the next word in a sentence
+- Trained on 100+ common English phrases
+- Context-aware suggestions (bigram, trigram, quadgram)
+- **Number Sequence Prediction:** Recognizes patterns in sequences
+  - Arithmetic progressions (1,2,3,4,5 → 6)
+  - Geometric progressions (2,4,8,16 → 32)
+  - Fibonacci sequences (1,1,2,3,5 → 8)
+  - Square/Cube numbers
+
+### 8. 🎨 Interactive UI
+- Built with Streamlit
+- Real-time predictions and visualizations
+- Modern gradient design with smooth animations
+- Responsive layout for all devices
 
 ---
 
 ## 🛠️ TECH STACK
 
-- **Programming:** Python  
-- **Libraries:** NumPy, Pandas, Scikit-learn  
-- **Visualization/UI:** Streamlit, Matplotlib  
-- **NLP:** TextBlob, NLTK, SpeechRecognition  
+| Category | Technologies |
+|----------|--------------|
+| **Programming** | Python 3.11 |
+| **Core Libraries** | NumPy, Pandas, Scikit-learn |
+| **Visualization/UI** | Streamlit, Matplotlib, Plotly |
+| **Computer Vision** | OpenCV, Haar Cascades |
+| **NLP** | TextBlob, NLTK, SpeechRecognition |
+| **Neural Networks** | Custom implementation (NumPy) |
+| **ML/AI** | LSTM (Custom), Hopfield Network |
+| **Image Processing** | Pillow, SciPy |
 
 ---
 
